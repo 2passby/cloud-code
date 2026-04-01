@@ -61,11 +61,52 @@ unzip bun-darwin-aarch64.zip
 # 2. 安装依赖（pnpm + npm registry）
 pnpm install --registry https://registry.npmjs.org
 
-# 3. 构建
+# 3. 补全缺失的私有依赖存根 (由于部分包未发布到 npm，需要手动创建空实现)
+mkdir -p node_modules/@ant/claude-for-chrome-mcp/src
+echo '{"name":"@ant/claude-for-chrome-mcp","main":"src/index.ts"}' > node_modules/@ant/claude-for-chrome-mcp/package.json
+echo 'export const BROWSER_TOOLS = []; export const createClaudeForChromeMcpServer = () => {};' > node_modules/@ant/claude-for-chrome-mcp/src/index.ts
+
+mkdir -p node_modules/@anthropic-ai/sandbox-runtime/dist
+echo '{"name":"@anthropic-ai/sandbox-runtime","main":"dist/index.js"}' > node_modules/@anthropic-ai/sandbox-runtime/package.json
+echo 'export class Sandbox {}; export const SandboxRuntime = {}; export const SandboxManager = class { constructor() {} }; export const SandboxViolationStore = class {}; export const SandboxRuntimeConfigSchema = {};' > node_modules/@anthropic-ai/sandbox-runtime/dist/index.js
+
+mkdir -p node_modules/@anthropic-ai/mcpb/dist
+echo '{"name":"@anthropic-ai/mcpb","main":"dist/index.js"}' > node_modules/@anthropic-ai/mcpb/package.json
+echo 'export const getMcpConfigForManifest = async () => ({}); export const McpbManifest = {}; export const McpbUserConfigurationOption = {};' > node_modules/@anthropic-ai/mcpb/dist/index.js
+
+mkdir -p node_modules/color-diff-napi
+echo '{"name":"color-diff-napi","main":"index.js"}' > node_modules/color-diff-napi/package.json
+echo 'export class ColorDiff { render() { return []; } }; export class ColorFile { render() { return []; } }; export function getSyntaxTheme() { return null; }' > node_modules/color-diff-napi/index.js
+
+mkdir -p node_modules/modifiers-napi
+echo '{"name":"modifiers-napi","main":"index.js"}' > node_modules/modifiers-napi/package.json
+echo 'module.exports = { prewarm: () => {}, isModifierPressed: () => false };' > node_modules/modifiers-napi/index.js
+
+# 4. 修复 foundry-sdk 缺失文件
+mkdir -p node_modules/@anthropic-ai/foundry-sdk/internal/utils
+echo 'export const uuid = () => "";' > node_modules/@anthropic-ai/foundry-sdk/internal/utils/uuid.mjs
+echo 'export const sleep = async () => {};' > node_modules/@anthropic-ai/foundry-sdk/internal/utils/sleep.mjs
+echo 'export const encodeUTF8 = () => new Uint8Array(); export const encodeBase64 = () => ""; export const decodeBase64 = () => new Uint8Array();' > node_modules/@anthropic-ai/foundry-sdk/internal/utils/base64.mjs
+
+# 5. 修复 commander 的多字符短选项补丁
+python3 -c "
+import sys
+content = open('node_modules/commander/lib/option.js').read()
+content = content.replace('const shortFlagExp = /^-[^-]$/;', 'const shortFlagExp = /^-[^-]+$/;')
+content = content.replace('if (/^-[^-][^-]/.test(unsupportedFlag))', 'if (false)')
+open('node_modules/commander/lib/option.js', 'w').write(content)
+"
+
+# 6. 构建
 bun run build.ts
 
-# 4. 运行
+# 7. 运行
 bun dist/cli.js --version
+
+# 8. 链接到全局 (可选，用于直接在终端执行 claude)
+chmod +x dist/cli.js
+# sudo ln -s $(pwd)/dist/cli.js /usr/local/bin/claude
+# 或者通过 alias: echo \"alias claude='bun $(pwd)/dist/cli.js'\" >> ~/.zshrc
 ```
 
 ## 构建说明
